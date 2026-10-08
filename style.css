@@ -1423,9 +1423,6 @@ body.dark .code-row input {
   margin: 4px 0;
   font-weight: 700;
 }
-#joinModal {
-  z-index: 10000 !important;
-}
 #joinModal.hidden {
   display: none !important;
 }
