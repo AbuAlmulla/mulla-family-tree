@@ -374,7 +374,6 @@ body.dark .btn-close {
   width: 100%;
   height: 100%;
   transform-origin: 0 0;
-  transition: transform 0.1s ease-out;
 }
 
 .tree-empty {
@@ -1423,39 +1422,7 @@ body.dark .code-row input {
   margin: 4px 0;
   font-weight: 700;
 }
-#joinModal.hidden {
-  display: none !important;
-}
 
-#joinModal:not(.hidden) {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-#joinModal .modal-content {
-  display: flex !important;
-  flex-direction: column !important;
-  background: #ffffff !important;
-  color: #000000 !important;
-}
-
-#joinModal .modal-body {
-  display: block !important;
-  padding: 20px !important;
-}
-
-#joinModal .modal-header,
-#joinModal .modal-footer {
-  display: flex !important;
-}
-#joinModal .modal-content {
-  z-index: 10001 !important;
-}
-
-#joinModal .modal-overlay {
-  z-index: 10000 !important;
-}
 /* ============================================
    معلومات المستخدم في القائمة الجانبية
    ============================================ */
@@ -1501,4 +1468,26 @@ body.dark .code-row input {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.8);
   margin-top: 3px;
+}
+.tree-node-level {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--primary);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--gold);
+  z-index: 5;
+}
+
+body.dark .tree-node-level {
+  background: var(--bg-card);
+  color: var(--gold);
 }
