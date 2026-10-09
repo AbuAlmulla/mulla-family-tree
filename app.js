@@ -1058,8 +1058,9 @@ function renderTree() {
 
 const level = getPersonLevel(person.id);
 
-nodeEl.innerHTML = `
+    nodeEl.innerHTML = `
   <div class="tree-node-card">
+    <div class="tree-node-level">${level}</div>
     ${badgeHtml}
     <div class="tree-node-name">${escapeHtml(person.name)}</div>
     ${person.title ? `<div class="tree-node-title">${escapeHtml(person.title)}</div>` : ""}
