@@ -236,6 +236,7 @@ function initCompact() {
 }
 
 console.log("✅ الجزء 1 محمّل");
+
 /* ============================================
    الجزء 2: المصادقة + تحميل البيانات + الانضمام
    ============================================ */
@@ -287,7 +288,6 @@ async function handleUserLoggedIn(user) {
 
 // ===== 10. المتابعة بعد المصادقة =====
 async function proceedAfterAuth(user) {
-  // 1. إذا كان قادماً من "الدخول بكود"
   const pendingCode = storage.get("pendingJoinCode", null);
   const pendingName = storage.get("pendingJoinName", null);
 
@@ -298,7 +298,6 @@ async function proceedAfterAuth(user) {
     return;
   }
 
-  // 2. ابحث عن عائلة المستخدم
   const familyId = await findUserFamily(user.uid);
   if (familyId) {
     state.familyId = familyId;
@@ -308,7 +307,6 @@ async function proceedAfterAuth(user) {
     return;
   }
 
-  // 3. أنشئ عائلة جديدة (فقط للمالك عبر Google)
   if (user.email || user.providerData.some(p => p.providerId === "google.com")) {
     await createNewFamily(user);
   } else {
@@ -427,22 +425,22 @@ async function loadFamilyData(familyId) {
     }
 
     const memberRef = doc(db, COLLECTIONS.FAMILIES, familyId, COLLECTIONS.MEMBERS, state.user.uid);
-const memberSnap = await getDoc(memberRef);
-const savedRole = storage.get("userRole", null);
-if (memberSnap.exists()) {
-  state.role = memberSnap.data().role || savedRole || ROLES.VIEWER;
-} else if (savedRole) {
-  state.role = savedRole;
-} else {
-  state.role = ROLES.VIEWER;
-}
+    const memberSnap = await getDoc(memberRef);
+    const savedRole = storage.get("userRole", null);
+    if (memberSnap.exists()) {
+      state.role = memberSnap.data().role || savedRole || ROLES.VIEWER;
+    } else if (savedRole) {
+      state.role = savedRole;
+    } else {
+      state.role = ROLES.VIEWER;
+    }
 
-   // تحقق: إذا كان ownerId مطابقاً، فهو مالك
-const familyRef = doc(db, COLLECTIONS.FAMILIES, familyId);
-const familySnap = await getDoc(familyRef);
-if (familySnap.exists() && familySnap.data().ownerId === state.user.uid) {
-  state.role = ROLES.OWNER;
-}
+    const familyRef = doc(db, COLLECTIONS.FAMILIES, familyId);
+    const familySnap = await getDoc(familyRef);
+    if (familySnap.exists() && familySnap.data().ownerId === state.user.uid) {
+      state.role = ROLES.OWNER;
+    }
+
     startRealtimeListeners(familyId);
   } catch (error) {
     console.error("خطأ في التحميل:", error);
@@ -497,7 +495,6 @@ function cleanupListeners() {
 
 
 // ===== 16. الدخول والخروج =====
-
 async function handleGoogleLogin() {
   try {
     showToast("جارٍ تسجيل الدخول...", "info");
@@ -622,6 +619,8 @@ async function joinFamilyByCode(code, userName) {
     return false;
   }
 }
+
+
 // ===== 21. فتح نافذة الانضمام =====
 function openJoinModal() {
   const jm = document.getElementById("joinModal");
@@ -633,7 +632,6 @@ function openJoinModal() {
   const nameInput = document.getElementById("inputJoinName");
   if (codeInput) codeInput.value = "";
   if (nameInput) nameInput.value = "";
-  if (titleInput) titleInput.value = "";
 
   setTimeout(() => codeInput && codeInput.focus(), 300);
 }
@@ -660,57 +658,58 @@ async function confirmJoin() {
   hide("joinModal");
 
   const familiesSnap = await getDocs(collection(db, COLLECTIONS.FAMILIES));
-let targetFamily = null;
-let role = null;
+  let targetFamily = null;
+  let role = null;
 
-for (const familyDoc of familiesSnap.docs) {
-  const data = familyDoc.data();
-  if (data.editorCode && data.editorCode.toString().trim().toUpperCase() === code.toUpperCase()) {
-    targetFamily = familyDoc.id;
-    role = ROLES.EDITOR;
-    break;
+  for (const familyDoc of familiesSnap.docs) {
+    const data = familyDoc.data();
+    if (data.editorCode && data.editorCode.toString().trim().toUpperCase() === code.toUpperCase()) {
+      targetFamily = familyDoc.id;
+      role = ROLES.EDITOR;
+      break;
+    }
+    if (data.viewerCode && data.viewerCode.toString().trim().toUpperCase() === code.toUpperCase()) {
+      targetFamily = familyDoc.id;
+      role = ROLES.VIEWER;
+      break;
+    }
   }
-  if (data.viewerCode && data.viewerCode.toString().trim().toUpperCase() === code.toUpperCase()) {
-    targetFamily = familyDoc.id;
-    role = ROLES.VIEWER;
-    break;
-  }
-}
 
-if (!targetFamily) {
-  showToast("❌ كود غير صحيح", "error");
+  if (!targetFamily) {
+    showToast("❌ كود غير صحيح", "error");
+    storage.remove("pendingJoinCode");
+    storage.remove("pendingJoinName");
+    return;
+  }
+
+  if (role === ROLES.EDITOR) {
+    if (!state.user || !state.user.email) {
+      try {
+        await signInWithPopup(auth, googleProvider);
+        return;
+      } catch (error) {
+        showToast("❌ يجب تسجيل Google للمحرر", "error");
+        return;
+      }
+    }
+  } else {
+    if (!state.user) {
+      try {
+        await signInAnonymously(auth);
+      } catch (error) {
+        showToast("❌ فشل الدخول", "error");
+        return;
+      }
+    }
+  }
+
+  await joinFamilyByCode(code, name);
   storage.remove("pendingJoinCode");
   storage.remove("pendingJoinName");
-  return;
-}
-
-if (role === ROLES.EDITOR) {
-  if (!state.user || !state.user.email) {
-    try {
-      await signInWithPopup(auth, googleProvider);
-      return;
-    } catch (error) {
-      showToast("❌ يجب تسجيل Google للمحرر", "error");
-      return;
-    }
-  }
-} else {
-  if (!state.user) {
-    try {
-      await signInAnonymously(auth);
-    } catch (error) {
-      showToast("❌ فشل الدخول", "error");
-      return;
-    }
-  }
-}
-
-await joinFamilyByCode(code, name);
-storage.remove("pendingJoinCode");
-storage.remove("pendingJoinName");
 }
 
 console.log("✅ الجزء 2 محمّل");
+
 /* ============================================
    الجزء 3: CRUD للأفراد + العلاقات + السجل + الإعدادات
    ============================================ */
@@ -729,6 +728,7 @@ async function addPerson(personData) {
     const newPerson = {
       name: personData.name.trim(),
       gender: personData.gender || "male",
+      title: personData.title || "",
       fatherId: personData.fatherId || null,
       motherId: personData.motherId || null,
       birthYear: personData.birthYear || null,
@@ -973,6 +973,7 @@ function updateSettingsUI() {
 }
 
 console.log("✅ الجزء 3 محمّل");
+
 /* ============================================
    الجزء 4: رسم الشجرة + التكبير/التحريك
    ============================================ */
@@ -1026,11 +1027,11 @@ function renderTree() {
       const x2 = node.x + NODE_WIDTH / 2;
       const y2 = node.y;
       const midY = (y1 + y2) / 2;
-      if (Math.abs(x1 - x2) < 100)  {
-  line.setAttribute("d", `M ${x1} ${y1} L ${x2} ${y2}`);
-} else {
-  line.setAttribute("d", `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`);
-}
+      if (Math.abs(x1 - x2) < 100) {
+        line.setAttribute("d", `M ${x1} ${y1} L ${x2} ${y2}`);
+      } else {
+        line.setAttribute("d", `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`);
+      }
       line.setAttribute("stroke", "#d4af37");
       line.setAttribute("stroke-width", "2.5");
       line.setAttribute("fill", "none");
@@ -1056,24 +1057,22 @@ function renderTree() {
     if (person.relationType === "fostered") badgeHtml = '<span class="tree-node-badge">كفالة</span>';
     if (person.isAlive === "deceased") badgeHtml = '<span class="tree-node-badge">متوفى</span>';
 
-const level = getPersonLevel(person.id);
+    const level = getPersonLevel(person.id);
 
     nodeEl.innerHTML = `
-  <div class="tree-node-card">
-    <div class="tree-node-level">${level}</div>
-    ${badgeHtml}
-    <div class="tree-node-name">${escapeHtml(person.name)}</div>
-    ${person.title ? `<div class="tree-node-title">${escapeHtml(person.title)}</div>` : ""}
-  </div>
-`;
+      <div class="tree-node-card">
+        <div class="tree-node-level">${level}</div>
+        ${badgeHtml}
+        <div class="tree-node-name">${escapeHtml(person.name)}</div>
+        ${person.title ? `<div class="tree-node-title">${escapeHtml(person.title)}</div>` : ""}
+      </div>
+    `;
 
     nodeEl.addEventListener("click", (e) => {
       e.stopPropagation();
       openPersonCard(person.id);
     });
 
-
-  // ... باقي الكود
     let longPressTimer;
     nodeEl.addEventListener("touchstart", (e) => {
       longPressTimer = setTimeout(() => {
@@ -1133,10 +1132,8 @@ function layoutSubtree(person, startX, startY, depth) {
   });
 
   const firstChildX = childResults[0].nodes[0].x;
-const lastChildResult = childResults[childResults.length - 1];
-const lastChildNodes = lastChildResult.nodes.filter(n => n.y === startY + NODE_HEIGHT + V_GAP);
-const lastChildX = lastChildNodes.length > 0 ? lastChildNodes[0].x : firstChildX;
-const parentX = firstChildX;
+  const parentX = firstChildX;
+
   nodes.push({ id: person.id, x: parentX, y: startY, parentId: getParentId(person) });
 
   const nextX = Math.max(childX, parentX + NODE_WIDTH);
@@ -1276,8 +1273,9 @@ function showActionBar() {
 }
 
 console.log("✅ الجزء 4 محمّل");
+
 /* ============================================
-   الجزء 5: البطاقة السفلية + القائمة الدائرية + الإضافة السريعة
+   الجزء 5: البطاقة السفلية + القائمة الدائرية + الإضافة السريعة + القرابة
    ============================================ */
 
 // ===== 38. البطاقة السفلية =====
@@ -1288,7 +1286,7 @@ function openPersonCard(personId) {
   }
 
   const person = getPersonById(personId);
-  
+  if (!person) return;
 
   state.selectedPersonId = personId;
   focusOnPerson(personId);
@@ -1560,51 +1558,6 @@ function getRelationToRoot(personId) {
   if (!shortestPath || shortestPath.length < 2) return "";
   return `قريب (${shortestPath.length - 1} خطوات)`;
 }
-function describeRelation(path) {
-  const len = path.length - 1;
-  if (len === 1) return "قريب مباشر";
-
-  const target = getPersonById(path[path.length - 1]);
-  const isFemale = target && target.gender === "female";
-
-  const steps = [];
-  for (let i = 0; i < len; i++) {
-    const from = getPersonById(path[i]);
-    const to = getPersonById(path[i + 1]);
-    if (!from || !to) continue;
-
-    if (from.fatherId === to.id || from.motherId === to.id) {
-      steps.push("up");
-    } else if (to.fatherId === from.id || to.motherId === from.id) {
-      steps.push("down");
-    } else if (state.unions.some(u => 
-      (u.husbandId === from.id && u.wifeId === to.id) || 
-      (u.wifeId === from.id && u.husbandId === to.id)
-    )) {
-      steps.push("spouse");
-    } else {
-      steps.push("relative");
-    }
-  }
-
-  const ups = steps.filter(s => s === "up").length;
-  const downs = steps.filter(s => s === "down").length;
-  const spouses = steps.filter(s => s === "spouse").length;
-
-  if (spouses > 0) return "قريب بالزواج";
-  if (ups === 1 && downs === 0) return isFemale ? "أم" : "أب";
-  if (ups === 2 && downs === 0) return isFemale ? "جدة" : "جد";
-  if (ups === 3 && downs === 0) return isFemale ? "جدة عليا" : "جد أعلى";
-  if (downs === 1 && ups === 0) return isFemale ? "ابنة" : "ابن";
-  if (downs === 2 && ups === 0) return isFemale ? "حفيدة" : "حفيد";
-  if (downs === 3 && ups === 0) return isFemale ? "حفيدة عليا" : "حفيد أعلى";
-  if (ups === 1 && downs === 1) return isFemale ? "أخت" : "أخ";
-  if (ups === 2 && downs === 1) return isFemale ? "عمة أو خالة" : "عم أو خال";
-  if (ups === 1 && downs === 2) return isFemale ? "ابنة أخ/أخت" : "ابن أخ/أخت";
-  if (ups === 2 && downs === 2) return isFemale ? "ابنة عم/عمة أو خال/خالة" : "ابن عم/عمة أو خال/خالة";
-  return `قريب (${len} خطوات)`;
-}
-
 
 function findPath(startId, endId) {
   if (startId === endId) return [startId];
@@ -1650,6 +1603,245 @@ function getNeighbors(personId) {
   });
 
   return Array.from(neighbors);
+}
+
+
+// ===== 41.1 مستوى الشخص =====
+function getPersonLevel(personId) {
+  const roots = findRootPersons();
+  if (roots.length === 0) return 0;
+
+  let minLevel = Infinity;
+  roots.forEach(root => {
+    const path = findPath(root.id, personId);
+    if (path && path.length < minLevel) {
+      minLevel = path.length;
+    }
+  });
+
+  return minLevel === Infinity ? 0 : minLevel;
+}
+
+
+// ===== 41.2 حساب القرابة بين شخصين =====
+let relationState = {
+  firstPerson: null,
+  secondPerson: null
+};
+
+function calculateRelationFlow() {
+  relationState.firstPerson = null;
+  relationState.secondPerson = null;
+
+  showToast("👆 اختر الشخص الأول", "info");
+  state.selectedPersonId = null;
+  state.relationMode = true;
+
+  renderTree();
+}
+
+function handleRelationClick(personId) {
+  if (!state.relationMode) return false;
+
+  if (!relationState.firstPerson) {
+    relationState.firstPerson = personId;
+    const p1 = getPersonById(personId);
+    if (p1) showToast(`✅ الأول: ${p1.name}`, "info");
+    return true;
+  }
+
+  if (relationState.firstPerson === personId) {
+    showToast("⚠️ اختر شخصاً آخر", "warning");
+    return true;
+  }
+
+  relationState.secondPerson = personId;
+  const p1 = getPersonById(relationState.firstPerson);
+  const p2 = getPersonById(relationState.secondPerson);
+  if (!p1 || !p2) return false;
+
+  const level1 = getPersonLevel(relationState.firstPerson);
+  const level2 = getPersonLevel(relationState.secondPerson);
+  const diff = level2 - level1;
+
+  const isP1Female = p1.gender === "female";
+  const isP2Female = p2.gender === "female";
+
+  let relation = "";
+
+  // ===== حالة: نفس المستوى (diff = 0) =====
+  if (diff === 0) {
+    const sameFather = p1.fatherId && p2.fatherId && p1.fatherId === p2.fatherId;
+    const sameMother = p1.motherId && p2.motherId && p1.motherId === p2.motherId;
+
+    // 1. شقيقان (نفس الأب والأم)
+    if (sameFather && sameMother) {
+      relation = isP1Female ? "أخت شقيقة" : "أخ شقيق";
+    }
+    // 2. غير شقيقين (نفس الأب فقط أو نفس الأم فقط)
+    else if (sameFather || sameMother) {
+      relation = isP1Female ? "أخت غير شقيقة" : "أخ غير شقيق";
+    }
+    // 3. أبناء عم (الأبوان مختلفان، لكن الأب أخو أب الآخر)
+    else if (p1.fatherId && p2.fatherId) {
+      const f1 = getPersonById(p1.fatherId);
+      const f2 = getPersonById(p2.fatherId);
+      if (f1 && f2 && areSiblings(f1, f2)) {
+        relation = isP1Female ? "ابنة عم" : "ابن عم";
+      }
+    }
+    // 4. أبناء خال (الأم أخت أم الآخر)
+    if (!relation && p1.motherId && p2.motherId) {
+      const m1 = getPersonById(p1.motherId);
+      const m2 = getPersonById(p2.motherId);
+      if (m1 && m2 && areSiblings(m1, m2)) {
+        relation = isP1Female ? "ابنة خالة" : "ابن خال";
+      }
+    }
+    // 5. افتراضي
+    if (!relation) relation = "قريب";
+  }
+
+  // ===== حالة: p2 أعلى بمستوى (diff > 0) =====
+  else if (diff === 1) {
+    if (p1.fatherId === p2.id) relation = "أب";
+    else if (p1.motherId === p2.id) relation = "أم";
+    else if (p1.fatherId) {
+      const f1 = getPersonById(p1.fatherId);
+      if (f1 && areSiblings(f1, p2)) {
+        relation = isP2Female ? "عمة" : "عم";
+      }
+    }
+    if (!relation && p1.motherId) {
+      const m1 = getPersonById(p1.motherId);
+      if (m1 && areSiblings(m1, p2)) {
+        relation = isP2Female ? "خالة" : "خال";
+      }
+    }
+    if (!relation) {
+  const isBrotherOfFather = p2.fatherId && areSiblings(getPersonById(p2.fatherId), p1);
+  const isBrotherOfMother = p2.motherId && areSiblings(getPersonById(p2.motherId), p1);
+  
+  if (isBrotherOfFather) {
+    relation = isP2Female ? "ابنة أخ" : "ابن أخ";
+  } else if (isBrotherOfMother) {
+    relation = isP2Female ? "ابنة أخت" : "ابن أخت";
+  } else {
+    relation = isP2Female ? "ابنة أخ/أخت" : "ابن أخ/أخت";
+  }
+}
+  }
+  else if (diff === 2) {
+    relation = isP1Female ? "حفيدة" : "حفيد";
+  }
+  else if (diff >= 3) {
+    relation = isP1Female ? "حفيدة عليا" : "حفيد أعلى";
+  }
+
+  // ===== حالة: p1 أعلى بمستوى (diff < 0) =====
+  else if (diff === -1) {
+    if (p2.fatherId === p1.id) relation = "ابن";
+    else if (p2.motherId === p1.id) relation = "ابنة";
+    else if (p2.fatherId) {
+      const f2 = getPersonById(p2.fatherId);
+      if (f2 && areSiblings(f2, p1)) {
+        relation = isP1Female ? "عمة" : "عم";
+      }
+    }
+    if (!relation && p2.motherId) {
+      const m2 = getPersonById(p2.motherId);
+      if (m2 && areSiblings(m2, p1)) {
+        relation = isP1Female ? "خالة" : "خال";
+      }
+    }
+    if (!relation) {
+  const isBrotherOfFather = p2.fatherId && areSiblings(getPersonById(p2.fatherId), p1);
+  const isBrotherOfMother = p2.motherId && areSiblings(getPersonById(p2.motherId), p1);
+  
+  if (isBrotherOfFather) {
+    relation = isP2Female ? "ابنة أخ" : "ابن أخ";
+  } else if (isBrotherOfMother) {
+    relation = isP2Female ? "ابنة أخت" : "ابن أخت";
+  } else {
+    relation = isP2Female ? "ابنة أخ/أخت" : "ابن أخ/أخت";
+  }
+}
+  }
+  else if (diff === -2) {
+    relation = isP2Female ? "حفيدة" : "حفيد";
+  }
+  else if (diff <= -3) {
+    relation = isP2Female ? "حفيدة عليا" : "حفيد أعلى";
+  }
+
+  // ===== بناء النص =====
+  let subject, object;
+  if (diff <= 0) {
+    subject = p1;
+    object = p2;
+  } else {
+    subject = p2;
+    object = p1;
+  }
+
+  const relationText = `${subject.name} ${relation} ${object.name}`;
+
+  // ===== عرض النافذة =====
+  const modal = document.getElementById("relationResultModal");
+  const el1 = document.getElementById("relationPerson1");
+  const el2 = document.getElementById("relationPerson2");
+  const elText = document.getElementById("relationText");
+
+  if (el1) el1.textContent = p1.name;
+  if (el2) el2.textContent = p2.name;
+  if (elText) elText.textContent = relationText;
+  if (modal) modal.style.display = "flex";
+
+  const btnClose = document.getElementById("btnCloseRelationResult");
+  if (btnClose) {
+    btnClose.onclick = function() { modal.style.display = "none"; };
+  }
+
+  state.relationMode = false;
+  state.selectedPersonId = null;
+  relationState.firstPerson = null;
+  relationState.secondPerson = null;
+  renderTree();
+
+  return true;
+}
+
+// ===== دالة مساعدة: هل الشخصان أشقاء؟ =====
+function areSiblings(a, b) {
+  if (!a || !b || a.id === b.id) return false;
+  if (a.fatherId && b.fatherId && a.fatherId === b.fatherId) return true;
+  if (a.motherId && b.motherId && a.motherId === b.motherId) return true;
+  return false;
+}
+
+// ===== 41.3 التركيز على شخص =====
+function focusOnPerson(personId) {
+  const node = document.querySelector(`.tree-node[data-person-id="${personId}"]`);
+  if (!node) return;
+
+  const container = document.getElementById("treeContainer");
+  if (!container) return;
+
+  const containerRect = container.getBoundingClientRect();
+
+  const targetZoom = 1.5;
+
+  const nodeCenterX = node.offsetLeft + node.offsetWidth / 2;
+  const nodeCenterY = node.offsetTop + node.offsetHeight / 2;
+
+  const containerCenterX = containerRect.width / 2;
+  const containerCenterY = containerRect.height / 2;
+
+  state.zoom = targetZoom;
+  state.panX = containerCenterX - nodeCenterX * targetZoom;
+  state.panY = containerCenterY - nodeCenterY * targetZoom;
+
+  applyTransform();
 }
 
 
@@ -1716,6 +1908,7 @@ function updatePinButtons() {
 }
 
 console.log("✅ الجزء 5 محمّل");
+
 /* ============================================
    الجزء 6 (الأخير): النوافذ + الإعدادات + ربط الأحداث
    ============================================ */
@@ -1763,6 +1956,7 @@ function openPersonModal(personId = null) {
   } else {
     titleEl.textContent = "إضافة فرد";
     nameInput.value = "";
+    if (titleInput) titleInput.value = "";
     genderInput.value = "male";
     fatherInput.value = "";
     motherInput.value = "";
@@ -2135,9 +2329,7 @@ function handleActionBarClick(action) {
     case "pie": showToast("💡 اضغط مطولاً على أي فرد", "info"); break;
     case "settings": openSettings(); switchActiveAction("settings"); break;
     case "theme": toggleTheme(); break;
-      case "relation":
-  calculateRelationFlow();
-  break;
+    case "relation": calculateRelationFlow(); break;
   }
 }
 
@@ -2189,7 +2381,7 @@ function openPersonsList() {
 
 // ===== 49. القائمة الجانبية =====
 function handleDrawerNav(nav) {
-  setTimeout(() => updateDrawerUserInfo(), 100);  // ← أضف هذا السطر
+  setTimeout(() => updateDrawerUserInfo(), 100);
   hide("sideDrawer");
   setTimeout(() => {
     switch (nav) {
@@ -2205,7 +2397,7 @@ function handleDrawerNav(nav) {
         if (confirm("هل تريد تسجيل الخروج؟")) handleLogout();
         break;
     }
-    }, 200);
+  }, 200);
 }
 
 
@@ -2294,7 +2486,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // أزرار الإغلاق
   const closeMap = {
     "btnCloseSettings": "settingsModal",
     "btnClosePersonModal": "personModal",
@@ -2322,7 +2513,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // نسخ الأكواد
   const btnCopyEditor = document.getElementById("btnCopyEditorCode");
   if (btnCopyEditor) {
     btnCopyEditor.addEventListener("click", () => {
@@ -2345,22 +2535,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 
-// ===== 51. تصدير للاستخدام العام =====
-window.FT = {
-  state, showToast, show, hide, storage,
-  generateId, generateInviteCode,
-  getPersonById, getPersonName, canEdit, isOwner,
-  ROLES, RELATION_TYPES, COLLECTIONS, STORAGE_KEYS,
-  openPieMenu, closePieMenu, openPersonCard,
-  openPersonModal, openRelationModal, openSettings, openPersonsList
-};
-
-
-console.log("✅✅✅ تم تحميل app.js بالكامل بنجاح! ✅✅✅");
-
-/* ============================================
-   عرض معلومات المستخدم في القائمة الجانبية
-   ============================================ */
+// ===== 51. معلومات المستخدم في القائمة =====
 function updateDrawerUserInfo() {
   const avatarEl = document.getElementById("drawerUserAvatar");
   const nameEl = document.getElementById("drawerUserName");
@@ -2379,259 +2554,16 @@ function updateDrawerUserInfo() {
     roleEl.textContent = roleNames[state.role] || "—";
   }
 }
-/* ============================================
-   حساب العلاقة بين شخصين
-   ============================================ */
 
-function getRelationBetween(startId, endId) {
-  const path = findPath(startId, endId);
-  if (!path || path.length < 2) return null;
 
-  const start = getPersonById(startId);
-  const end = getPersonById(endId);
-  if (!start || !end) return null;
-
-  const relation = describeRelationBetween(path, start, end);
-  return `${end.name} ${relation} ${start.name}`;
-}
-
-function describeRelationBetween(path, startPerson, endPerson) {
-  const len = path.length - 1;
-  const isEndFemale = endPerson.gender === "female";
-
-  const steps = [];
-  for (let i = 0; i < len; i++) {
-    const from = getPersonById(path[i]);
-    const to = getPersonById(path[i + 1]);
-    if (!from || !to) continue;
-
-    if (from.fatherId === to.id || from.motherId === to.id) {
-      steps.push("up");
-    } else if (to.fatherId === from.id || to.motherId === from.id) {
-      steps.push("down");
-    } else if (state.unions.some(u => 
-      (u.husbandId === from.id && u.wifeId === to.id) || 
-      (u.wifeId === from.id && u.husbandId === to.id)
-    )) {
-      steps.push("spouse");
-    } else {
-      steps.push("relative");
-    }
-  }
-
-  const ups = steps.filter(s => s === "up").length;
-  const downs = steps.filter(s => s === "down").length;
-  const spouses = steps.filter(s => s === "spouse").length;
-
-  if (spouses > 0) return "قريب بالزواج";
-
-  // الأبناء
-  if (downs === 1 && ups === 0) {
-    if (endPerson.fatherId === startPerson.id || endPerson.motherId === startPerson.id) {
-      return isEndFemale ? "ابنة" : "ابن";
-    }
-    return isEndFemale ? "ابنة أخ/أخت" : "ابن أخ/أخت";
-  }
-
-  // الأحفاد
-  if (downs === 2 && ups === 0) return isEndFemale ? "حفيدة" : "حفيد";
-  if (downs === 3 && ups === 0) return isEndFemale ? "حفيدة عليا" : "حفيد أعلى";
-
-  // الآباء والأمهات
-  if (ups === 1 && downs === 0) {
-    if (startPerson.fatherId === endPerson.id) return "أب";
-    if (startPerson.motherId === endPerson.id) return "أم";
-
-    // أخ/أخت الوالد
-    const parentId = startPerson.fatherId || startPerson.motherId;
-    const parent = getPersonById(parentId);
-    if (parent) {
-      const isSibling = state.persons.some(p => 
-        p.id === endPerson.id && 
-        ((p.fatherId && p.fatherId === parent.fatherId) || 
-         (p.motherId && p.motherId === parent.motherId))
-      );
-      if (isSibling) {
-        if (parent.gender === "male") return isEndFemale ? "عمة" : "عم";
-        return isEndFemale ? "خالة" : "خال";
-      }
-    }
-    return isEndFemale ? "عمة أو خالة" : "عم أو خال";
-  }
-
-  // الأجداد
-  if (ups === 2 && downs === 0) {
-    return isEndFemale ? "جدة" : "جد";
-  }
-  if (ups === 3 && downs === 0) {
-    return isEndFemale ? "جدة عليا" : "جد أعلى";
-  }
-  if (ups >= 4 && downs === 0) {
-    return isEndFemale ? "جدة عليا" : "جد أعلى";
-  }
-
-  // نفس الجيل
-  if (ups === 1 && downs === 1) {
-    if ((startPerson.fatherId && startPerson.fatherId === endPerson.fatherId) ||
-        (startPerson.motherId && startPerson.motherId === endPerson.motherId)) {
-      return isEndFemale ? "أخت" : "أخ";
-    }
-    return isEndFemale ? "أخت غير شقيقة" : "أخ غير شقيق";
-  }
-
-  // أبناء العم/الخال
-  if (ups === 2 && downs === 2) {
-    return isEndFemale ? "ابنة عم أو خال" : "ابن عم أو خال";
-  }
-
-  // أعمام/أخوال الأجداد → جدة/جد
-  if (ups === 3 && downs === 1) {
-    return isEndFemale ? "جدة" : "جد";
-  }
-  if (ups === 3 && downs === 2) {
-    return isEndFemale ? "جدة" : "جد";
-  }
-
-  // أبناء الأحفاد
-  if (ups === 1 && downs === 2) return isEndFemale ? "ابنة حفيد" : "ابن حفيد";
-  if (ups === 1 && downs === 3) return isEndFemale ? "ابنة حفيد أعلى" : "ابن حفيد أعلى";
-
-  return `قريب (${len} خطوات)`;
-}
-/* ============================================
-   حساب مستوى الشخص (طابقه)
-   ============================================ */
-function getPersonLevel(personId) {
-  const roots = findRootPersons();
-  if (roots.length === 0) return 0;
-
-  let minLevel = Infinity;
-  roots.forEach(root => {
-    const path = findPath(root.id, personId);
-    if (path && path.length < minLevel) {
-      minLevel = path.length;
-    }
-  });
-
-  return minLevel === Infinity ? 0 : minLevel;
-}
-/* ============================================
-   حساب القرابة بين شخصين
-   ============================================ */
-
-let relationState = {
-  firstPerson: null,
-  secondPerson: null
+// ===== 52. تصدير للاستخدام العام =====
+window.FT = {
+  state, showToast, show, hide, storage,
+  generateId, generateInviteCode,
+  getPersonById, getPersonName, canEdit, isOwner,
+  ROLES, RELATION_TYPES, COLLECTIONS, STORAGE_KEYS,
+  openPieMenu, closePieMenu, openPersonCard,
+  openPersonModal, openRelationModal, openSettings, openPersonsList
 };
 
-function calculateRelationFlow() {
-  relationState.firstPerson = null;
-  relationState.secondPerson = null;
-
-  showToast("👆 اختر الشخص الأول", "info");
-  state.selectedPersonId = null;
-  state.relationMode = true;
-
-    renderTree();
-function handleRelationClick(personId) {
-  if (!state.relationMode) return false;
-
-  if (!relationState.firstPerson) {
-    relationState.firstPerson = personId;
-    const p1 = getPersonById(personId);
-    showToast(`✅ الأول: ${p1.name}\n👆 اختر الشخص الثاني`, "info");
-    return true;
-  }
-
-  if (relationState.firstPerson === personId) {
-    showToast("⚠️ اختر شخصاً آخر", "warning");
-    return true;
-  }
-
-  relationState.secondPerson = personId;
-  const p1 = getPersonById(relationState.firstPerson); // الأول (الذي نسأل عنه)
-  const p2 = getPersonById(relationState.secondPerson); // الثاني
-
-  const level1 = getPersonLevel(relationState.firstPerson);
-  const level2 = getPersonLevel(relationState.secondPerson);
-  const diff = level2 - level1;
-
-  const isP1Female = p1.gender === "female";
-  let relation = "";
-
-  if (diff === 0) {
-    relation = isP1Female ? "أخت" : "أخ";
-  } else if (diff === 1) {
-    // p2 أعلى → p1 (الأدنى) ابن أخ/أخت p2
-    relation = isP1Female ? "ابنة أخ/أخت" : "ابن أخ/أخت";
-  } else if (diff === 2) {
-    relation = isP1Female ? "حفيدة" : "حفيد";
-  } else if (diff >= 3) {
-    relation = isP1Female ? "حفيدة عليا" : "حفيد أعلى";
-  } else if (diff === -1) {
-    // p1 أعلى → p1 عم/خال p2
-    relation = isP1Female ? "عمة أو خالة" : "عم أو خال";
-  } else if (diff === -2) {
-    relation = isP1Female ? "جدة" : "جد";
-  } else if (diff <= -3) {
-    relation = isP1Female ? "جدة عليا" : "جد أعلى";
-  }
-
-  const relationText = `${p1.name} ${relation} ${p2.name}`;
-
-  const modal = document.getElementById("relationResultModal");
-  const el1 = document.getElementById("relationPerson1");
-  const el2 = document.getElementById("relationPerson2");
-  const elText = document.getElementById("relationText");
-
-  if (el1) el1.textContent = p1.name;
-  if (el2) el2.textContent = p2.name;
-  if (elText) elText.textContent = relationText;
-  if (modal) modal.style.display = "flex";
-
-  const btnClose = document.getElementById("btnCloseRelationResult");
-  if (btnClose) {
-    btnClose.onclick = function() { modal.style.display = "none"; };
-  }
-
-  state.relationMode = false;
-  state.selectedPersonId = null;
-  relationState.firstPerson = null;
-  relationState.secondPerson = null;
-  renderTree();
-
-  return true;
-}
-}
-/* =======================================
-   التركيز على شخص (Zoom + Center)
-   ============================================ */
-function focusOnPerson(personId) {
-  const node = document.querySelector(`.tree-node[data-person-id="${personId}"]`);
-  if (!node) return;
-
-  const container = document.getElementById("treeContainer");
-  if (!container) return;
-
-  const containerRect = container.getBoundingClientRect();
-  const nodeRect = node.getBoundingClientRect();
-
-  // الموضع الحالي للشجرة
-  const currentZoom = state.zoom;
-  const targetZoom = 1.5;
-
-  // مركز العقدة في الشجرة (قبل التحويل)
-  const nodeCenterX = node.offsetLeft + node.offsetWidth / 2;
-  const nodeCenterY = node.offsetTop + node.offsetHeight / 2;
-
-  // مركز الحاوية
-  const containerCenterX = containerRect.width / 2;
-  const containerCenterY = containerRect.height / 2;
-
-  // حساب panX و panY
-  state.zoom = targetZoom;
-  state.panX = containerCenterX - nodeCenterX * targetZoom;
-  state.panY = containerCenterY - nodeCenterY * targetZoom;
-
-  applyTransform();
-}
+console.log("✅✅✅ تم تحميل app.js بالكامل بنجاح! ✅✅✅");
