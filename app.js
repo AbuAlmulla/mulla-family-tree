@@ -2532,8 +2532,9 @@ function calculateRelationFlow() {
   state.selectedPersonId = null;
   state.relationMode = true;
 
-  renderTree();
+    renderTree();
 }
+  
 function handleRelationClick(personId) {
   if (!state.relationMode) return false;
 
@@ -2555,49 +2556,29 @@ function handleRelationClick(personId) {
 
   const level1 = getPersonLevel(relationState.firstPerson);
   const level2 = getPersonLevel(relationState.secondPerson);
-  const diff = level2 - level1; // فرق المستوى (2 - 1)
+  const diff = level2 - level1;
 
+  const isP2Female = p2.gender === "female";
   let relation = "";
 
-  const isP1Female = p1.gender === "female";
-  const isP2Female = p2.gender === "female";
-
   if (diff === 0) {
-    // نفس المستوى
     relation = isP2Female ? "أخت" : "أخ";
   } else if (diff === 1) {
-    // p2 أعلى بمستوى واحد → عم/خال لـ p1
-    if (isP2Female) relation = "عمة أو خالة";
-    else relation = "عم أو خال";
+    relation = isP2Female ? "عمة أو خالة" : "عم أو خال";
   } else if (diff === 2) {
-    // p2 أعلى بمستويين → جد/جدة لـ p1
-    if (isP2Female) relation = "جدة";
-    else relation = "جد";
-  } else if (diff === 3) {
-    if (isP2Female) relation = "جدة عليا";
-    else relation = "جد أعلى";
-  } else if (diff >= 4) {
-    if (isP2Female) relation = "جدة عليا";
-    else relation = "جد أعلى";
+    relation = isP2Female ? "جدة" : "جد";
+  } else if (diff >= 3) {
+    relation = isP2Female ? "جدة عليا" : "جد أعلى";
   } else if (diff === -1) {
-    // p1 أعلى بمستوى واحد → p2 ابن/ابنة أخ/أخت
-    if (isP2Female) relation = "ابنة أخ/أخت";
-    else relation = "ابن أخ/أخت";
+    relation = isP2Female ? "ابنة أخ/أخت" : "ابن أخ/أخت";
   } else if (diff === -2) {
-    if (isP2Female) relation = "حفيدة";
-    else relation = "حفيد";
-  } else if (diff === -3) {
-    if (isP2Female) relation = "حفيدة عليا";
-    else relation = "حفيد أعلى";
-  } else if (diff <= -4) {
-    if (isP2Female) relation = "حفيدة عليا";
-    else relation = "حفيد أعلى";
+    relation = isP2Female ? "حفيدة" : "حفيد";
+  } else if (diff <= -3) {
+    relation = isP2Female ? "حفيدة عليا" : "حفيد أعلى";
   }
 
-  // صياغة النص: "p2 (relation) p1"
   const relationText = `${p2.name} ${relation} ${p1.name}`;
 
-  // عرض النافذة المخصصة
   const modal = document.getElementById("relationResultModal");
   const el1 = document.getElementById("relationPerson1");
   const el2 = document.getElementById("relationPerson2");
@@ -2610,7 +2591,7 @@ function handleRelationClick(personId) {
 
   const btnClose = document.getElementById("btnCloseRelationResult");
   if (btnClose) {
-    btnClose.onclick = () => { modal.style.display = "none"; };
+    btnClose.onclick = function() { modal.style.display = "none"; };
   }
 
   state.relationMode = false;
@@ -2621,7 +2602,7 @@ function handleRelationClick(personId) {
 
   return true;
 }
-/* ============================================
+/* =======================================
    التركيز على شخص (Zoom + Center)
    ============================================ */
 function focusOnPerson(personId) {
