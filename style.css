@@ -1491,3 +1491,17 @@ body.dark .tree-node-level {
   background: var(--bg-card);
   color: var(--gold);
 }
+.tree-node-title {
+  font-size: 10px;
+  color: rgba(212, 175, 55, 0.75);
+  text-align: center;
+  line-height: 1.2;
+  margin-top: 3px;
+  font-weight: 500;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+body.dark .tree-node-title {
+  color: rgba(212, 175, 55, 0.6);
+}

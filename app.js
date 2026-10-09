@@ -633,6 +633,7 @@ function openJoinModal() {
   const nameInput = document.getElementById("inputJoinName");
   if (codeInput) codeInput.value = "";
   if (nameInput) nameInput.value = "";
+  if (titleInput) titleInput.value = "";
 
   setTimeout(() => codeInput && codeInput.focus(), 300);
 }
@@ -1059,9 +1060,9 @@ const level = getPersonLevel(person.id);
 
 nodeEl.innerHTML = `
   <div class="tree-node-card">
-    <div class="tree-node-level">${level}</div>
     ${badgeHtml}
     <div class="tree-node-name">${escapeHtml(person.name)}</div>
+    ${person.title ? `<div class="tree-node-title">${escapeHtml(person.title)}</div>` : ""}
   </div>
 `;
 
@@ -1724,6 +1725,7 @@ function openPersonModal(personId = null) {
 
   const titleEl = document.getElementById("personModalTitle");
   const nameInput = document.getElementById("inputPersonName");
+  const titleInput = document.getElementById("inputPersonTitle");
   const genderInput = document.getElementById("selectGender");
   const fatherInput = document.getElementById("selectFather");
   const motherInput = document.getElementById("selectMother");
@@ -1742,6 +1744,7 @@ function openPersonModal(personId = null) {
 
     titleEl.textContent = "تعديل فرد";
     nameInput.value = person.name || "";
+    if (titleInput) titleInput.value = person.title || "";
     genderInput.value = person.gender || "male";
     fatherInput.value = person.fatherId || "";
     motherInput.value = person.motherId || "";
@@ -1815,6 +1818,7 @@ async function savePersonFromModal() {
   const data = {
     name: name,
     gender: document.getElementById("selectGender").value,
+    title: document.getElementById("inputPersonTitle") ? document.getElementById("inputPersonTitle").value.trim() : "",
     fatherId: document.getElementById("selectFather").value || null,
     motherId: document.getElementById("selectMother").value || null,
     birthYear: parseInt(document.getElementById("inputBirthYear").value) || null,
