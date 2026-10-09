@@ -2533,8 +2533,6 @@ function calculateRelationFlow() {
   state.relationMode = true;
 
     renderTree();
-}
-  
 function handleRelationClick(personId) {
   if (!state.relationMode) return false;
 
@@ -2551,33 +2549,35 @@ function handleRelationClick(personId) {
   }
 
   relationState.secondPerson = personId;
-  const p1 = getPersonById(relationState.firstPerson);
-  const p2 = getPersonById(relationState.secondPerson);
+  const p1 = getPersonById(relationState.firstPerson); // الأول (الذي نسأل عنه)
+  const p2 = getPersonById(relationState.secondPerson); // الثاني
 
   const level1 = getPersonLevel(relationState.firstPerson);
   const level2 = getPersonLevel(relationState.secondPerson);
   const diff = level2 - level1;
 
-  const isP2Female = p2.gender === "female";
+  const isP1Female = p1.gender === "female";
   let relation = "";
 
   if (diff === 0) {
-    relation = isP2Female ? "أخت" : "أخ";
+    relation = isP1Female ? "أخت" : "أخ";
   } else if (diff === 1) {
-    relation = isP2Female ? "عمة أو خالة" : "عم أو خال";
+    // p2 أعلى → p1 (الأدنى) ابن أخ/أخت p2
+    relation = isP1Female ? "ابنة أخ/أخت" : "ابن أخ/أخت";
   } else if (diff === 2) {
-    relation = isP2Female ? "جدة" : "جد";
+    relation = isP1Female ? "حفيدة" : "حفيد";
   } else if (diff >= 3) {
-    relation = isP2Female ? "جدة عليا" : "جد أعلى";
+    relation = isP1Female ? "حفيدة عليا" : "حفيد أعلى";
   } else if (diff === -1) {
-    relation = isP2Female ? "ابنة أخ/أخت" : "ابن أخ/أخت";
+    // p1 أعلى → p1 عم/خال p2
+    relation = isP1Female ? "عمة أو خالة" : "عم أو خال";
   } else if (diff === -2) {
-    relation = isP2Female ? "حفيدة" : "حفيد";
+    relation = isP1Female ? "جدة" : "جد";
   } else if (diff <= -3) {
-    relation = isP2Female ? "حفيدة عليا" : "حفيد أعلى";
+    relation = isP1Female ? "جدة عليا" : "جد أعلى";
   }
 
-  const relationText = `${p2.name} ${relation} ${p1.name}`;
+  const relationText = `${p1.name} ${relation} ${p2.name}`;
 
   const modal = document.getElementById("relationResultModal");
   const el1 = document.getElementById("relationPerson1");
@@ -2601,6 +2601,7 @@ function handleRelationClick(personId) {
   renderTree();
 
   return true;
+}
 }
 /* =======================================
    التركيز على شخص (Zoom + Center)
